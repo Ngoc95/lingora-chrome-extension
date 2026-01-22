@@ -37,6 +37,15 @@ async function handleMessage(request, sender) {
             case 'login':
                 return await api.login(request.identifier, request.password);
 
+            case 'googleLogin':
+                return await api.googleLogin(request.idToken);
+
+            case 'uploadImage':
+                const bytes = new Uint8Array(request.fileData);
+                const blob = new Blob([bytes], { type: request.fileType });
+                const file = new File([blob], request.fileName, { type: request.fileType });
+                return await api.uploadImage(file);
+
             case 'logout':
                 return await api.logout();
 
@@ -64,6 +73,13 @@ async function handleMessage(request, sender) {
                 }
                 return { success: true };
 
+            case 'playAudio':
+                if (request.url) {
+                    await playAudio(request.url);
+                    return { success: true };
+                }
+                return { error: 'No URL provided' };
+
             default:
                 throw new Error(`Unknown action: ${request.action}`);
         }
@@ -84,7 +100,31 @@ chrome.runtime.onInstalled.addListener((details) => {
     }
 });
 
-// Keep service worker alive (optional, for debugging)
+/**
+ * Play audio using offscreen document
+ */
+async function playAudio(url) {
+    // Check if offscreen document already exists
+    const contexts = await chrome.runtime.getContexts({
+        contextTypes: ['OFFSCREEN_DOCUMENT']
+    });
+
+    if (contexts.length === 0) {
+        await chrome.offscreen.createDocument({
+            url: 'offscreen.html',
+            reasons: ['AUDIO_PLAYBACK'],
+            justification: 'Play word pronunciation'
+        });
+    }
+
+    // Send audio URL to offscreen document
+    chrome.runtime.sendMessage({
+        action: 'playAudioOffscreen',
+        url: url
+    });
+}
+
+// Keep service worker alive
 chrome.runtime.onStartup.addListener(() => {
     console.log('Lingora Extension started');
 });

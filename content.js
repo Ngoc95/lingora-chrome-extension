@@ -26,8 +26,9 @@ function init() {
  * Sync authentication state with the Lingora web app
  */
 async function syncAuthWithWebApp() {
-    const isLingoraDomain = window.location.hostname === 'localhost' && window.location.port === '3000';
-    // Add production domain here later
+    const isLocalhost = window.location.hostname === 'localhost' && window.location.port === '3000';
+    const isVercel = window.location.hostname === 'lingora-web-app.vercel.app';
+    const isLingoraDomain = isLocalhost || isVercel;
 
     if (!isLingoraDomain) return;
 
@@ -95,31 +96,37 @@ async function syncAuthWithWebApp() {
     window.addEventListener('message', async (event) => {
         if (event.data.type === 'LINGORA_WEB_AUTH_DATA') {
             const webAuth = event.data.data;
-            const extAuth = await chrome.runtime.sendMessage({ action: 'checkAuth' });
+            try {
+                const extAuth = await chrome.runtime.sendMessage({ action: 'checkAuth' });
 
-            if (webAuth && webAuth.accessToken) {
-                // If web app is logged in but extension is not, or has different user
-                if (!extAuth.isAuthenticated || extAuth.accessToken !== webAuth.accessToken) {
-                    console.log('Lingora: Adoption of web app auth state');
-                    await chrome.runtime.sendMessage({
-                        action: 'syncAuth',
-                        accessToken: webAuth.accessToken,
-                        user: webAuth.user
-                    });
+                if (webAuth && webAuth.accessToken) {
+                    // If web app is logged in but extension is not, or has different user
+                    if (!extAuth.isAuthenticated || extAuth.accessToken !== webAuth.accessToken) {
+                        console.log('Lingora: Adoption of web app auth state');
+                        await chrome.runtime.sendMessage({
+                            action: 'syncAuth',
+                            accessToken: webAuth.accessToken,
+                            user: webAuth.user
+                        });
+                    }
+                } else if (extAuth.isAuthenticated && (!webAuth || !webAuth.accessToken)) {
+                    // Extension is logged in but web app is not -> Sync to web app
+                    console.log('Lingora: Push auth state to web app');
+                    window.postMessage({
+                        type: 'LINGORA_SET_WEB_AUTH',
+                        data: { accessToken: extAuth.accessToken, user: extAuth.user }
+                    }, '*');
+                } else if (!webAuth || !webAuth.accessToken) {
+                    // Both logged out or web app logged out
+                    if (extAuth.isAuthenticated) {
+                        // This could be a logout on the web app -> sync logout to extension
+                        console.log('Lingora: Syncing logout from web app');
+                        await chrome.runtime.sendMessage({ action: 'syncAuth', accessToken: null });
+                    }
                 }
-            } else if (extAuth.isAuthenticated && (!webAuth || !webAuth.accessToken)) {
-                // Extension is logged in but web app is not -> Sync to web app
-                console.log('Lingora: Push auth state to web app');
-                window.postMessage({
-                    type: 'LINGORA_SET_WEB_AUTH',
-                    data: { accessToken: extAuth.accessToken, user: extAuth.user }
-                }, '*');
-            } else if (!webAuth || !webAuth.accessToken) {
-                // Both logged out or web app logged out
-                if (extAuth.isAuthenticated) {
-                    // This could be a logout on the web app -> sync logout to extension
-                    console.log('Lingora: Syncing logout from web app');
-                    await chrome.runtime.sendMessage({ action: 'syncAuth', accessToken: null });
+            } catch (e) {
+                if (e.message.includes('Extension context invalidated')) {
+                    console.log('Lingora: Extension updated, please refresh the page.');
                 }
             }
         }
@@ -218,12 +225,15 @@ function hideSelectionButton() {
  * Handle clicks outside the button and popup
  */
 function handleClickOutside(event) {
-    // Check if click is outside button and popup
+    // Hide selection button if clicked outside
     if (selectionButton && !selectionButton.contains(event.target)) {
-        if (!dictionaryPopup || !dictionaryPopup.contains(event.target)) {
-            hideSelectionButton();
-            hideDictionaryPopup();
-        }
+        hideSelectionButton();
+    }
+
+    // Hide dictionary popup if clicked outside
+    if (dictionaryPopup && !dictionaryPopup.contains(event.target)) {
+        hideDictionaryPopup();
+        hideSelectionButton();
     }
 }
 
@@ -236,9 +246,18 @@ async function lookupWord(term) {
         showLoadingPopup();
 
         // Check if user is authenticated
-        const authCheck = await chrome.runtime.sendMessage({ action: 'checkAuth' });
+        let authCheck;
+        try {
+            authCheck = await chrome.runtime.sendMessage({ action: 'checkAuth' });
+        } catch (e) {
+            if (e.message.includes('Extension context invalidated')) {
+                showErrorPopup('Extension đã được cập nhật. Vui lòng tải lại trang (nhấn F5) để tiếp tục sử dụng.');
+                return;
+            }
+            throw e;
+        }
 
-        if (!authCheck.isAuthenticated) {
+        if (!authCheck || !authCheck.isAuthenticated) {
             showErrorPopup('Vui lòng đăng nhập để sử dụng tính năng này.');
             return;
         }
@@ -279,7 +298,7 @@ async function lookupWord(term) {
         }
 
         // Show dictionary popup with word data
-        showDictionaryPopup(wordData);
+        await showDictionaryPopup(wordData);
 
     } catch (error) {
         console.error('Lookup error:', error);
@@ -342,7 +361,7 @@ function showErrorPopup(message) {
 /**
  * Show dictionary popup with word data
  */
-function showDictionaryPopup(wordData) {
+async function showDictionaryPopup(wordData) {
     hideDictionaryPopup();
 
     dictionaryPopup = document.createElement('div');
@@ -353,7 +372,10 @@ function showDictionaryPopup(wordData) {
     let html = `
     <div class="lingora-popup-content">
       <div class="lingora-popup-header">
-        <h3>${wordData.word}</h3>
+        <div class="lingora-word-info">
+          <h3>${wordData.word}</h3>
+          ${wordData.type && wordData.type !== 'UNKNOWN' ? `<span class="lingora-type-tag">${formatWordType(wordData.type)}</span>` : ''}
+        </div>
         <button class="lingora-close-btn" title="Đóng">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -367,7 +389,7 @@ function showDictionaryPopup(wordData) {
 
     // Phonetic
     if (wordData.phonetic) {
-        html += `<div class="lingora-phonetic">/${wordData.phonetic}/</div>`;
+        html += `<div class="lingora-phonetic">${wordData.phonetic}</div>`;
     }
 
     // Audio
@@ -381,11 +403,6 @@ function showDictionaryPopup(wordData) {
         Phát âm
       </button>
     `;
-    }
-
-    // Type
-    if (wordData.type && wordData.type !== 'UNKNOWN') {
-        html += `<div class="lingora-type">${formatWordType(wordData.type)}</div>`;
     }
 
     // Meaning
@@ -408,19 +425,23 @@ function showDictionaryPopup(wordData) {
         html += `<img src="${wordData.imageUrl}" alt="${wordData.word}" class="lingora-image" />`;
     }
 
+    const authCheck = await chrome.runtime.sendMessage({ action: 'checkAuth' });
+    const syncTokenParam = authCheck.accessToken ? `?syncToken=${authCheck.accessToken}` : '';
+    const webAppUrl = `https://lingora-web-app.vercel.app/study-sets${syncTokenParam}`;
+
     html += `
       </div>
       
-      <div class="lingora-popup-footer">
-        <button class="lingora-save-btn" id="lingora-save-flashcard">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <div class="lingora-popup-footer" style="flex-direction: column; gap: 8px;">
+        <button class="lingora-save-btn" id="lingora-save-flashcard" style="width: 100%;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
             <polyline points="17 21 17 13 7 13 7 21"></polyline>
             <polyline points="7 3 7 8 15 8"></polyline>
           </svg>
           Lưu vào bộ học liệu
         </button>
-        <a href="https://lingora-web-app.vercel.app/study-sets" target="_blank" class="lingora-webapp-link">Mở trang bộ học liệu</a>
+        <a href="${webAppUrl}" target="_blank" class="lingora-webapp-link">Mở trang bộ học liệu</a>
       </div>
     </div>
   `;
@@ -435,15 +456,22 @@ function showDictionaryPopup(wordData) {
     // Audio button
     const audioBtn = dictionaryPopup.querySelector('.lingora-audio-btn');
     if (audioBtn) {
-        audioBtn.addEventListener('click', () => {
-            const audio = new Audio(audioBtn.dataset.audio);
-            audio.play();
+        audioBtn.addEventListener('click', async () => {
+            try {
+                // Use background script to play audio (bypasses CSP on sites like Facebook)
+                chrome.runtime.sendMessage({
+                    action: 'playAudio',
+                    url: audioBtn.dataset.audio
+                });
+            } catch (e) {
+                console.error('Lingora: Audio playback failed', e);
+            }
         });
     }
 
     // Save button
     dictionaryPopup.querySelector('#lingora-save-flashcard').addEventListener('click', () => {
-        showSaveDialog(wordData);
+        showEditFlashcardDialog(wordData);
     });
 }
 
@@ -472,171 +500,287 @@ function hideDictionaryPopup() {
 }
 
 /**
- * Show save to study set dialog
+ * Show integrated edit & save flashcard view
  */
-async function showSaveDialog(wordData) {
+/**
+ * Show integrated edit & save flashcard view (Premium Redesign)
+ */
+async function showEditFlashcardDialog(wordData) {
+    const originalContent = dictionaryPopup.innerHTML;
+
+    // Loading State
+    dictionaryPopup.innerHTML = `
+        <div class="lingora-popup-content">
+            <div class="lingora-popup-header"><h3>Đang chuẩn bị...</h3></div>
+            <div class="lingora-popup-body"><div class="lingora-loading"><div class="lingora-spinner"></div></div></div>
+        </div>
+    `;
+
     try {
-        // Get user's study sets
         const studySets = await chrome.runtime.sendMessage({ action: 'getStudySets' });
+        if (studySets.error) throw new Error(studySets.error);
 
-        if (studySets.error) {
-            throw new Error(studySets.error);
-        }
+        let selectedSetId = studySets.length > 0 ? studySets[0].id : null;
+        let selectedSetName = studySets.length > 0 ? studySets[0].title : 'Chọn bộ...';
 
-        // Create save dialog
-        const saveDialog = document.createElement('div');
-        saveDialog.className = 'lingora-save-dialog';
-
-        const renderStudySets = (sets, filter = '') => {
+        const renderDropdownList = (sets, filter = '') => {
             const filtered = sets.filter(s => s.title.toLowerCase().includes(filter.toLowerCase()));
             let html = `
-                <button class="lingora-study-set-item new-set" data-id="new">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <line x1="12" y1="5" x2="12" y2="19"></line>
-                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                <div class="lingora-dropdown-item new-set-option" id="dropdown-create-new">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>
                     </svg>
                     Tạo bộ học liệu mới
-                </button>
+                </div>
             `;
-
-            if (filtered.length > 0) {
-                filtered.forEach(set => {
-                    html += `
-                        <button class="lingora-study-set-item" data-id="${set.id}">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                                <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
-                            </svg>
-                            ${set.title}
-                        </button>
-                    `;
-                });
-            } else if (filter !== '') {
-                html += '<p style="text-align:center;color:#9ca3af;padding:20px;">Không tìm thấy bộ học liệu nào</p>';
+            filtered.forEach(set => {
+                html += `<div class="lingora-dropdown-item" data-id="${set.id}">${set.title}</div>`;
+            });
+            if (filtered.length === 0 && filter) {
+                html += `<div class="lingora-dropdown-no-results">Không tìm thấy kết quả</div>`;
             }
             return html;
         };
 
-        let dialogHtml = `
-            <div class="lingora-save-dialog-content">
-                <h4>Chọn bộ học liệu</h4>
-                <div class="lingora-search-container">
-                    <svg class="lingora-search-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="8"></circle>
-                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-                    </svg>
-                    <input type="text" class="lingora-search-input" placeholder="Tìm bộ học liệu..." />
+        dictionaryPopup.innerHTML = `
+            <div class="lingora-popup-content lingora-compact-form">
+                <div class="lingora-popup-header">
+                    <div class="lingora-word-info">
+                        <h3 class="lingora-mini-title">Lưu Flashcard</h3>
+                    </div>
+                    <button class="lingora-close-btn" id="edit-cancel-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
                 </div>
-                <div class="lingora-study-sets">
-                    ${renderStudySets(studySets)}
+                
+                <div class="lingora-popup-body">
+                    <div class="lingora-form-field">
+                        <label>Mặt trước</label>
+                        <input type="text" id="edit-front" value="${wordData.word}" />
+                    </div>
+
+                    <div class="lingora-form-field">
+                        <label>Mặt sau (Nghĩa)</label>
+                        <textarea id="edit-back" rows="2">${wordData.meaning || wordData.vnMeaning || ''}</textarea>
+                    </div>
+
+                    <div class="lingora-form-field">
+                        <label>Ví dụ</label>
+                        <textarea id="edit-example" rows="2">${wordData.example || ''}</textarea>
+                    </div>
+
+                    <div class="lingora-image-upload-compact">
+                        <div class="lingora-preview-box">
+                            ${wordData.imageUrl ? `<img src="${wordData.imageUrl}" id="edit-preview" />` : '<div class="no-img">No Img</div>'}
+                        </div>
+                        <div class="lingora-upload-actions">
+                            <label>HÌNH ẢNH</label>
+                            <div class="lingora-actions-row">
+                                <input type="file" id="edit-image-file" accept="image/*" style="display:none" />
+                                <button class="lingora-upload-icon-btn" id="upload-trigger">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                        <polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line>
+                                    </svg>
+                                </button>
+                                <input type="text" id="edit-image-url" value="${wordData.imageUrl || ''}" placeholder="Dán link ảnh..." />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lingora-form-field" style="margin-top:10px">
+                        <label>BỘ HỌC LIỆU</label>
+                        <div class="lingora-premium-dropdown" id="set-dropdown">
+                            <div class="lingora-dropdown-trigger" id="dropdown-trigger">
+                                <span>${selectedSetName}</span>
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 9l6 6 6-6"></path>
+                                </svg>
+                            </div>
+                            <div class="lingora-dropdown-content" id="dropdown-content">
+                                <div class="lingora-dropdown-search-wrapper">
+                                    <input type="text" id="dropdown-search" placeholder="Tìm bộ học liệu..." autocomplete="off" />
+                                </div>
+                                <div class="lingora-dropdown-list" id="dropdown-list">
+                                    ${renderDropdownList(studySets)}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <button class="lingora-cancel-btn">Hủy</button>
+
+                <div class="lingora-popup-footer" id="new-set-form" style="display:none; padding:10px 16px;">
+                    <label style="font-size:10px; color:#6b7280; font-weight:700">TẠO BỘ MỚI</label>
+                    <input type="text" id="new-set-title" placeholder="Tên bộ học liệu..." />
+                    <div style="display:flex; gap:6px">
+                        <button class="lingora-minor-btn" id="cancel-new-set">Hủy</button>
+                        <button class="lingora-save-btn" id="confirm-new-set">Tạo & Lưu</button>
+                    </div>
+                </div>
+                
+                <div class="lingora-popup-footer" id="main-actions-footer" style="display: flex; flex-direction: row; justify-content: flex-end; align-items: center; gap: 12px;">
+                    <button class="lingora-link-btn" id="back-to-dict" style="margin-right: auto;">Quay lại tra từ</button>
+                    <button class="lingora-save-btn" id="final-save-btn" style="width: auto;">Lưu flashcard</button>
+                </div>
             </div>
         `;
 
-        saveDialog.innerHTML = dialogHtml;
-        dictionaryPopup.querySelector('.lingora-popup-content').appendChild(saveDialog);
+        // Logic Elements
+        const fileInput = dictionaryPopup.querySelector('#edit-image-file');
+        const uploadTrigger = dictionaryPopup.querySelector('#upload-trigger');
+        const urlInput = dictionaryPopup.querySelector('#edit-image-url');
+        const previewBox = dictionaryPopup.querySelector('.lingora-preview-box');
+        const dropdown = dictionaryPopup.querySelector('#set-dropdown');
+        const trigger = dictionaryPopup.querySelector('#dropdown-trigger');
+        const menu = dictionaryPopup.querySelector('#dropdown-content');
+        const searchInput = dictionaryPopup.querySelector('#dropdown-search');
+        const listContainer = dictionaryPopup.querySelector('#dropdown-list');
+        const finalSaveBtn = dictionaryPopup.querySelector('#final-save-btn');
+        const newSetForm = dictionaryPopup.querySelector('#new-set-form');
+        const mainFooter = dictionaryPopup.querySelector('#main-actions-footer');
 
-        const searchInput = saveDialog.querySelector('.lingora-search-input');
-        const setsList = saveDialog.querySelector('.lingora-study-sets');
+        // Dropdown Logic
+        trigger.onclick = (e) => {
+            e.stopPropagation();
+            const isOpen = dropdown.classList.toggle('active');
+            if (isOpen) {
+                searchInput.value = '';
+                listContainer.innerHTML = renderDropdownList(studySets);
+                attachItemListeners();
+                searchInput.focus();
+            }
+        };
 
-        // Add search filtering
-        searchInput.addEventListener('input', (e) => {
-            setsList.innerHTML = renderStudySets(studySets, e.target.value);
-            attachSetClickListeners();
-        });
-
-        const attachSetClickListeners = () => {
-            saveDialog.querySelectorAll('.lingora-study-set-item').forEach(item => {
-                item.onclick = async () => {
-                    const setId = item.dataset.id;
-                    if (setId === 'new') {
-                        showCreateStudySetForm(wordData, saveDialog);
-                    } else {
-                        await saveFlashcard(parseInt(setId), wordData);
-                        saveDialog.remove();
+        const attachItemListeners = () => {
+            listContainer.querySelectorAll('.lingora-dropdown-item').forEach(item => {
+                item.onclick = (e) => {
+                    e.stopPropagation();
+                    if (item.id === 'dropdown-create-new') {
+                        dropdown.classList.remove('active');
+                        newSetForm.style.display = 'block';
+                        mainFooter.style.display = 'none';
+                        dictionaryPopup.querySelector('#new-set-title').focus();
+                        return;
                     }
+                    selectedSetId = item.dataset.id;
+                    selectedSetName = item.textContent;
+                    trigger.querySelector('span').textContent = selectedSetName;
+                    dropdown.classList.remove('active');
                 };
             });
         };
 
-        attachSetClickListeners();
+        searchInput.oninput = (e) => {
+            listContainer.innerHTML = renderDropdownList(studySets, e.target.value);
+            attachItemListeners();
+        };
 
-        // Add cancel listener
-        saveDialog.querySelector('.lingora-cancel-btn').addEventListener('click', () => {
-            saveDialog.remove();
-        });
+        // Close dropdown when clicking elsewhere
+        document.addEventListener('click', (e) => {
+            if (dropdown && !dropdown.contains(e.target)) {
+                dropdown.classList.remove('active');
+            }
+        }, { once: true });
 
-    } catch (error) {
-        console.error('Error loading study sets:', error);
-        alert('Không thể tải danh sách bộ học liệu. Vui lòng thử lại.');
+        // Image Logic
+        uploadTrigger.onclick = () => fileInput.click();
+        fileInput.onchange = (e) => {
+            if (e.target.files?.[0]) {
+                const file = e.target.files[0];
+                urlInput.value = '';
+                const reader = new FileReader();
+                reader.onload = (re) => {
+                    previewBox.innerHTML = `<img src="${re.target.result}" />`;
+                };
+                reader.readAsDataURL(file);
+            }
+        };
+
+        urlInput.oninput = (e) => {
+            const url = e.target.value.trim();
+            if (url) {
+                fileInput.value = '';
+                previewBox.innerHTML = `<img src="${url}" />`;
+            } else {
+                previewBox.innerHTML = '<div class="no-img">No Img</div>';
+            }
+        };
+
+        // Footer Actions
+        dictionaryPopup.querySelector('#edit-cancel-btn').onclick = hideDictionaryPopup;
+        dictionaryPopup.querySelector('#back-to-dict').onclick = () => {
+            dictionaryPopup.innerHTML = originalContent;
+            dictionaryPopup.querySelector('.lingora-close-btn').onclick = hideDictionaryPopup;
+            dictionaryPopup.querySelector('#lingora-save-flashcard').onclick = () => showEditFlashcardDialog(wordData);
+            const audioBtn = dictionaryPopup.querySelector('.lingora-audio-btn');
+            if (audioBtn) audioBtn.onclick = () => chrome.runtime.sendMessage({ action: 'playAudio', url: audioBtn.dataset.audio });
+        };
+
+        dictionaryPopup.querySelector('#cancel-new-set').onclick = () => {
+            newSetForm.style.display = 'none';
+            mainFooter.style.display = 'flex';
+        };
+
+        const processSave = async (setId) => {
+            finalSaveBtn.disabled = true;
+            finalSaveBtn.textContent = '...';
+            try {
+                let finalImageUrl = urlInput.value.trim();
+                if (fileInput.files?.[0]) {
+                    const file = fileInput.files[0];
+                    const arrayBuffer = await file.arrayBuffer();
+                    const upRes = await chrome.runtime.sendMessage({
+                        action: 'uploadImage',
+                        fileData: Array.from(new Uint8Array(arrayBuffer)),
+                        fileName: file.name,
+                        fileType: file.type
+                    });
+                    if (upRes.error) throw new Error(upRes.error);
+                    finalImageUrl = upRes.imageUrl;
+                }
+                const finalData = {
+                    ...wordData,
+                    word: dictionaryPopup.querySelector('#edit-front').value.trim(),
+                    meaning: dictionaryPopup.querySelector('#edit-back').value.trim(),
+                    example: dictionaryPopup.querySelector('#edit-example').value.trim(),
+                    imageUrl: finalImageUrl
+                };
+                await saveFlashcard(setId, finalData);
+            } catch (err) {
+                alert('Lỗi: ' + err.message);
+                finalSaveBtn.disabled = false;
+                finalSaveBtn.textContent = 'Lưu';
+            }
+        };
+
+        finalSaveBtn.onclick = () => {
+            if (!selectedSetId) return alert('Vui lòng chọn bộ học liệu');
+            processSave(parseInt(selectedSetId));
+        };
+
+        dictionaryPopup.querySelector('#confirm-new-set').onclick = async () => {
+            const title = dictionaryPopup.querySelector('#new-set-title').value.trim();
+            if (!title) return alert('Vui lòng nhập tên bộ');
+            const btn = dictionaryPopup.querySelector('#confirm-new-set');
+            btn.disabled = true;
+            try {
+                const newSet = await chrome.runtime.sendMessage({ action: 'createStudySet', title, visibility: 'PRIVATE' });
+                if (newSet.error) throw new Error(newSet.error);
+                await processSave(newSet.id);
+            } catch (err) {
+                alert(err.message);
+                btn.disabled = false;
+            }
+        };
+
+    } catch (err) {
+        alert('Lỗi: ' + err.message);
+        hideDictionaryPopup();
     }
 }
 
-/**
- * Show create new study set form
- */
-function showCreateStudySetForm(wordData, saveDialog) {
-    const formHtml = `
-    <div class="lingora-new-set-form">
-      <h4>Tạo bộ học liệu mới</h4>
-      <input type="text" id="lingora-new-set-title" placeholder="Tên bộ học liệu..." />
-      <div class="lingora-form-actions">
-        <button class="lingora-cancel-btn" id="lingora-cancel-new-set">Hủy</button>
-        <button class="lingora-save-btn" id="lingora-create-new-set">Tạo và lưu</button>
-      </div>
-    </div>
-  `;
-
-    saveDialog.querySelector('.lingora-save-dialog-content').innerHTML = formHtml;
-
-    // Focus on input
-    const input = saveDialog.querySelector('#lingora-new-set-title');
-    input.focus();
-
-    // Cancel button
-    saveDialog.querySelector('#lingora-cancel-new-set').addEventListener('click', () => {
-        saveDialog.remove();
-    });
-
-    // Create button
-    saveDialog.querySelector('#lingora-create-new-set').addEventListener('click', async () => {
-        const title = input.value.trim();
-
-        if (!title) {
-            alert('Vui lòng nhập tên bộ học liệu');
-            return;
-        }
-
-        try {
-            // Create new study set
-            const newSet = await chrome.runtime.sendMessage({
-                action: 'createStudySet',
-                title: title,
-                visibility: 'PRIVATE'
-            });
-
-            if (newSet.error) {
-                throw new Error(newSet.error);
-            }
-
-            // Save flashcard to new study set
-            await saveFlashcard(newSet.id, wordData);
-            saveDialog.remove();
-
-        } catch (error) {
-            console.error('Error creating study set:', error);
-            alert('Không thể tạo bộ học liệu. Vui lòng thử lại.');
-        }
-    });
-
-    // Enter key to submit
-    input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            saveDialog.querySelector('#lingora-create-new-set').click();
-        }
-    });
-}
 
 /**
  * Save flashcard to study set

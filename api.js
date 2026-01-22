@@ -4,8 +4,8 @@
  */
 
 const API_CONFIG = {
-    // Default to localhost, can be changed via extension settings
-    baseURL: 'https://lingora-api.onrender.com' || 'http://localhost:4000',
+    // Default to production, can be overridden via chrome.storage.local.set({ apiBaseUrl: '...' })
+    baseURL: 'https://lingora-be-dxce.onrender.com',
     timeout: 10000
 };
 
@@ -141,6 +141,24 @@ const api = {
         const data = await apiRequest('/auth/login', {
             method: 'POST',
             body: { identifier, password },
+            skipAuth: true
+        });
+
+        if (data.metaData && data.metaData.accessToken) {
+            await setAuthToken(data.metaData.accessToken);
+            await chrome.storage.local.set({ user: data.metaData.user });
+        }
+
+        return data;
+    },
+
+    /**
+     * Google Login
+     */
+    googleLogin: async (idToken) => {
+        const data = await apiRequest('/auth/google', {
+            method: 'POST',
+            body: { idToken },
             skipAuth: true
         });
 

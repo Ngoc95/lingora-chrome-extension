@@ -19,14 +19,22 @@ const studySetsCount = document.getElementById('study-sets-count');
 
 // Initialize popup
 async function init() {
-    // Check if user is logged in
-    const authCheck = await chrome.runtime.sendMessage({ action: 'checkAuth' });
+    try {
+        // Check if user is logged in
+        const authCheck = await chrome.runtime.sendMessage({ action: 'checkAuth' });
 
-    if (authCheck.isAuthenticated) {
-        await loadUserData();
-        showMainView();
-    } else {
-        showLoginView();
+        if (authCheck.isAuthenticated) {
+            await loadUserData();
+            showMainView();
+        } else {
+            showLoginView();
+        }
+    } catch (e) {
+        if (e.message.includes('Extension context invalidated')) {
+            showError('Extension đã được cập nhật. Vui lòng đóng và mở lại popup này.');
+        } else {
+            console.error('Init error:', e);
+        }
     }
 }
 
@@ -117,9 +125,59 @@ loginForm.addEventListener('submit', async (e) => {
 /**
  * Handle Google login
  */
-googleLoginBtn.addEventListener('click', () => {
-    // Show temporary message
-    showError('Vui lòng đăng nhập bằng Email/Username và Mật khẩu. Tính năng Google Login cần cấu hình thêm trên Google Cloud.');
+googleLoginBtn.addEventListener('click', async () => {
+    hideError();
+    setLoading(true);
+
+    try {
+        // 1. Get Google Auth Code/Token via chrome.identity
+        // Note: For id_token, we need to use a specific response_type
+        const manifest = chrome.runtime.getManifest();
+        const clientId = "956597525941-4mc5jb4107i7166hks1jq3ciqnd9u9d8.apps.googleusercontent.com"; // From BE/FE env
+        const redirectUri = `https://${chrome.runtime.id}.chromiumapp.org/`;
+        const scope = encodeURIComponent('email profile openid');
+
+        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=id_token&redirect_uri=${redirectUri}&scope=${scope}&nonce=${Math.random().toString(36).substring(2)}`;
+
+        console.log('Lingora: Launching Google Auth flow...');
+
+        const responseUrl = await chrome.identity.launchWebAuthFlow({
+            url: authUrl,
+            interactive: true
+        });
+
+        if (!responseUrl) {
+            throw new Error('Google Login was cancelled or failed.');
+        }
+
+        // 2. Extract id_token from response URL
+        const url = new URL(responseUrl.replace('#', '?')); // Convert fragment to query params
+        const idToken = url.searchParams.get('id_token');
+
+        if (!idToken) {
+            throw new Error('Could not obtain Google ID Token.');
+        }
+
+        // 3. Send idToken to background -> api -> BE
+        const result = await chrome.runtime.sendMessage({
+            action: 'googleLogin',
+            idToken: idToken
+        });
+
+        if (result.error) {
+            throw new Error(result.error);
+        }
+
+        // Success!
+        await loadUserData();
+        showMainView();
+
+    } catch (error) {
+        console.error('Google Login error:', error);
+        showError(error.message || 'Đăng nhập Google thất bại.');
+    } finally {
+        setLoading(false);
+    }
 });
 
 /**

@@ -51,13 +51,14 @@
 
 .lingora-popup-content {
     background: white;
-    border-radius: 16px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    width: 400px;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    width: 380px;
     max-width: 90vw;
-    max-height: 80vh;
+    max-height: 85vh;
     overflow-y: auto;
     position: relative;
+    font-size: 13px;
 }
 
 /* Popup Header */
@@ -69,11 +70,31 @@
     border-bottom: 1px solid #e5e7eb;
 }
 
+.lingora-word-info {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.lingora-type-tag {
+    background: #ecfdf5;
+    color: #065f46;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: lowercase;
+}
+
 .lingora-popup-header h3 {
     margin: 0;
-    font-size: 24px;
+    font-size: 16px;
     font-weight: 700;
     color: #1f2937;
+}
+
+.lingora-mini-title {
+    font-size: 15px !important;
 }
 
 .lingora-close-btn {
@@ -109,20 +130,25 @@
 .lingora-audio-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 4px;
     background: #f3f4f6;
     border: none;
-    padding: 8px 16px;
-    border-radius: 8px;
+    padding: 4px 10px;
+    border-radius: 5px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 12px;
     color: #374151;
-    margin-bottom: 16px;
+    margin-bottom: 10px;
     transition: all 0.2s;
 }
 
 .lingora-audio-btn:hover {
     background: #e5e7eb;
+}
+
+.lingora-audio-btn svg {
+    width: 14px;
+    height: 14px;
 }
 
 .lingora-type {
@@ -173,17 +199,16 @@
 }
 
 .lingora-save-btn {
-    width: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
+    gap: 6px;
     background: linear-gradient(135deg, #00BC7D 0%, #00BBA7 100%);
     color: white;
     border: none;
-    padding: 12px 24px;
-    border-radius: 10px;
-    font-size: 15px;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 13px;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s;
@@ -210,6 +235,28 @@
 .lingora-webapp-link:hover {
     color: #00BC7D;
     text-decoration: underline;
+}
+
+.lingora-upload-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px;
+    background: #f3f4f6;
+    border: 2px dashed #d1d5db;
+    border-radius: 8px;
+    color: #374151;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.lingora-upload-trigger:hover {
+    background: #ecfdf5;
+    border-color: #00BC7D;
+    color: #00BC7D;
 }
 
 /* Loading State */
@@ -271,124 +318,284 @@
     background: #e5e7eb;
 }
 
-/* Save Dialog */
-.lingora-save-dialog {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+/* Integrated Compact Form Styles */
+.lingora-compact-form .lingora-popup-header {
+    padding: 10px 14px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.lingora-compact-form .lingora-word-info h3 {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.lingora-compact-form .lingora-popup-body {
+    padding: 10px 14px;
+}
+
+.lingora-compact-form .lingora-form-field {
+    margin-bottom: 8px;
+}
+
+.lingora-compact-form label {
+    font-size: 9px;
+    color: #9ca3af;
+    text-transform: uppercase;
+    font-weight: 800;
+    margin-bottom: 2px;
+    display: block;
+    letter-spacing: 0.05em;
+}
+
+.lingora-compact-form input[type="text"],
+.lingora-compact-form textarea {
+    width: 100%;
+    padding: 6px 10px;
+    font-size: 13px;
+    border: 1.5px solid #f3f4f6;
+    border-radius: 8px;
+    background: #fdfdfd;
+    transition: all 0.2s;
+}
+
+.lingora-compact-form input[type="text"]:focus,
+.lingora-compact-form textarea:focus {
+    border-color: #00BC7D;
+    background: #fff;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 188, 125, 0.1);
+}
+
+/* Premium Image Row */
+.lingora-image-upload-compact {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    background: #f9fbfb;
+    padding: 8px;
+    border-radius: 10px;
+    border: 1px solid #edf2f2;
+}
+
+.lingora-preview-box {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    overflow: hidden;
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 16px;
-    animation: lingora-fadeIn 0.2s ease;
-    z-index: 2147483647;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
-.lingora-save-dialog-content {
-    background: white;
-    border-radius: 12px;
-    padding: 24px;
-    width: 90%;
-    max-height: 90%;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-}
-
-.lingora-save-dialog-content h4 {
-    margin: 0 0 16px 0;
-    font-size: 18px;
-    font-weight: 700;
-    color: #1f2937;
-}
-
-.lingora-search-container {
-    margin-bottom: 12px;
-    position: relative;
-}
-
-.lingora-search-input {
+.lingora-preview-box img {
     width: 100%;
-    padding: 10px 12px 10px 36px;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    font-size: 14px;
-    transition: border-color 0.2s;
-    box-sizing: border-box;
+    height: 100%;
+    object-fit: cover;
 }
 
-.lingora-search-input:focus {
-    outline: none;
-    border-color: #00BC7D;
-}
-
-.lingora-search-icon {
-    position: absolute;
-    left: 10px;
-    top: 50%;
-    transform: translateY(-50%);
+.lingora-preview-box .no-img {
+    font-size: 7px;
     color: #9ca3af;
+    text-transform: uppercase;
 }
 
-.lingora-study-sets {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 16px;
-    overflow-y: auto;
+.lingora-upload-actions {
     flex: 1;
 }
 
-.lingora-study-set-item {
+.lingora-actions-row {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: #f9fafb;
-    border: 2px solid transparent;
-    border-radius: 10px;
-    cursor: pointer;
-    font-size: 14px;
-    color: #374151;
-    transition: all 0.2s;
-    text-align: left;
+    gap: 6px;
 }
 
-.lingora-study-set-item:hover {
-    background: #f3f4f6;
+.lingora-upload-icon-btn {
+    width: 32px;
+    height: 32px;
+    background: #00BC7D;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.lingora-upload-icon-btn:hover {
+    background: #00BBA7;
+    transform: translateY(-1px);
+}
+
+/* Premium Dropdown */
+.lingora-premium-dropdown {
+    position: relative;
+    width: 100%;
+}
+
+.lingora-dropdown-trigger {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #fff;
+    border: 1.5px solid #f3f4f6;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+
+.lingora-dropdown-trigger:hover {
     border-color: #00BC7D;
 }
 
-.lingora-study-set-item.new-set {
-    background: linear-gradient(135deg, #00BC7D 0%, #00BBA7 100%);
-    color: white;
-    font-weight: 600;
+.lingora-premium-dropdown.active .lingora-dropdown-trigger {
+    border-color: #00BC7D;
+    box-shadow: 0 0 0 3px rgba(0, 188, 125, 0.1);
 }
 
-.lingora-study-set-item.new-set:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 188, 125, 0.4);
+.lingora-dropdown-content {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    border: 1px solid #e5e7eb;
+    z-index: 9999;
+    display: none;
+    overflow: hidden;
 }
 
-.lingora-cancel-btn {
+.lingora-premium-dropdown.active .lingora-dropdown-content {
+    display: block;
+    animation: lingora-dropIn 0.2s ease;
+}
+
+@keyframes lingora-dropIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.lingora-dropdown-search-wrapper {
+    padding: 8px;
+    background: #f9fafb;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+.lingora-dropdown-search-wrapper input {
     width: 100%;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    border: 1px solid #e5e7eb !important;
+    border-radius: 6px !important;
+    outline: none !important;
+    background: #fff !important;
+}
+
+.lingora-dropdown-search-wrapper input:focus {
+    border-color: #00BC7D;
+}
+
+.lingora-dropdown-list {
+    max-height: 160px;
+    overflow-y: auto;
+    padding: 4px;
+}
+
+.lingora-dropdown-item {
+    padding: 8px 10px;
+    font-size: 13px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    color: #4b5563;
+}
+
+.lingora-dropdown-item:hover {
+    background: #ecfdf5;
+    color: #00BC7D;
+}
+
+.lingora-dropdown-item.new-set-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #00BC7D;
+    font-weight: 700;
+    border-bottom: 1px dotted #e5e7eb;
+    margin-bottom: 2px;
+}
+
+.lingora-dropdown-no-results {
+    padding: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: #9ca3af;
+}
+
+.lingora-compact-form .lingora-save-btn {
+    padding: 6px 16px;
+    font-size: 13px;
+    border-radius: 6px;
+    width: auto;
+}
+
+/* Footer & Buttons */
+.lingora-popup-footer {
+    padding: 6px 12px;
+    border-top: 1px solid #f3f4f6;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    min-height: 36px;
+}
+
+.lingora-link-btn {
+    border: none;
+    background: none;
+    color: #6b7280;
+    font-size: 12px;
+    cursor: pointer;
+    padding: 0;
+}
+
+.lingora-link-btn:hover {
+    color: #00BC7D;
+    text-decoration: underline;
+}
+
+.lingora-minor-btn {
     background: #f3f4f6;
     border: none;
-    padding: 10px 24px;
     border-radius: 8px;
-    cursor: pointer;
-    font-size: 14px;
+    padding: 8px 16px;
+    font-size: 12px;
     font-weight: 600;
-    color: #374151;
-    transition: all 0.2s;
-    margin-top: auto;
+    cursor: pointer;
 }
 
-.lingora-cancel-btn:hover {
-    background: #e5e7eb;
+/* New Set Title Input */
+#new-set-title {
+    width: 100%;
+    padding: 8px !important;
+    font-size: 12px !important;
+    border: 1.5px solid #f3f4f6 !important;
+    border-radius: 8px !important;
+    margin-bottom: 8px !important;
 }
 
 /* New Study Set Form */
@@ -480,4 +687,58 @@
 .lingora-save-dialog-content::-webkit-scrollbar-thumb:hover,
 .lingora-study-sets::-webkit-scrollbar-thumb:hover {
     background: #9ca3af;
+}
+
+/* Edit Form Styles */
+.lingora-edit-form {
+    padding: 24px;
+}
+
+.lingora-form-field {
+    margin-bottom: 16px;
+    text-align: left;
+}
+
+.lingora-form-field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 6px;
+}
+
+.lingora-form-field input,
+.lingora-form-field textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    font-size: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    transition: border-color 0.2s;
+    box-sizing: border-box;
+    background: #f9fafb;
+}
+
+.lingora-form-field input:focus,
+.lingora-form-field textarea:focus {
+    outline: none;
+    border-color: #00BC7D;
+    background: white;
+}
+
+.lingora-edit-preview {
+    width: 100%;
+    max-height: 120px;
+    object-fit: cover;
+    border-radius: 8px;
+    margin-top: 8px;
+    border: 1px solid #e5e7eb;
+}
+
+.lingora-edit-form h4 {
+    margin: 0 0 20px 0;
+    color: #1f2937;
+    font-size: 18px;
+    font-weight: 700;
 }

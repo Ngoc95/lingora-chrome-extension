@@ -5,7 +5,9 @@
     "description": "Tra cứu từ điển và lưu từ vào bộ học liệu flashcard ngay trên trang web",
     "permissions": [
         "activeTab",
-        "storage"
+        "storage",
+        "offscreen",
+        "identity"
     ],
     "host_permissions": [
         "http://localhost:4000/*",
