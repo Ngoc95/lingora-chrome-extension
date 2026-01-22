@@ -5,7 +5,7 @@
 
 const API_CONFIG = {
     // Default to localhost, can be changed via extension settings
-    baseURL: 'http://localhost:4000' || 'https://lingora-api.onrender.com',
+    baseURL: 'https://lingora-api.onrender.com' || 'http://localhost:4000',
     timeout: 10000
 };
 
