@@ -4,6 +4,7 @@
  */
 
 // Import API client (in Manifest V3, we need to use importScripts)
+importScripts('config.js');
 importScripts('api.js');
 
 // Listen for messages from content scripts and popup
@@ -71,6 +72,11 @@ async function handleMessage(request, sender) {
                     await chrome.storage.local.remove(['accessToken', 'user']);
                     console.log('Lingora: Auth cleared from web app');
                 }
+                return { success: true };
+
+            case 'openPopup':
+                // Open extension popup programmatically
+                chrome.action.openPopup();
                 return { success: true };
 
             case 'playAudio':

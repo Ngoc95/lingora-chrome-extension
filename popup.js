@@ -10,12 +10,55 @@ const loginForm = document.getElementById('login-form');
 const loginBtn = document.getElementById('login-btn');
 const logoutBtn = document.getElementById('logout-btn');
 const loginError = document.getElementById('login-error');
-const googleLoginBtn = document.getElementById('google-login-btn');
 
 // User info elements
 const userName = document.getElementById('user-name');
 const userEmail = document.getElementById('user-email');
 const studySetsCount = document.getElementById('study-sets-count');
+
+// Update footer links with config URLs when DOM loads
+document.addEventListener('DOMContentLoaded', () => {
+    // Wait a bit to ensure config.js is loaded
+    setTimeout(() => {
+        if (!window.LINGORA_CONFIG) {
+            console.warn('Lingora: Config not loaded yet, using default URLs');
+            return;
+        }
+
+        const registerLink = document.querySelector('a[href*="get-started"]');
+        const studySetsLink = document.querySelector('.footer-text a[href*="study-sets"]');
+
+        if (registerLink) {
+            registerLink.href = window.LINGORA_CONFIG.getWebAppUrl('/get-started');
+        }
+
+        if (studySetsLink) {
+            studySetsLink.href = window.LINGORA_CONFIG.getWebAppUrl('/study-sets');
+        }
+    }, 100); // Small delay to ensure config.js loads first
+});
+
+// Password toggle functionality
+const togglePasswordBtn = document.getElementById('toggle-password');
+const passwordInput = document.getElementById('password');
+const eyeIcon = document.getElementById('eye-icon');
+const eyeOffIcon = document.getElementById('eye-off-icon');
+
+if (togglePasswordBtn) {
+    togglePasswordBtn.addEventListener('click', () => {
+        const type = passwordInput.type === 'password' ? 'text' : 'password';
+        passwordInput.type = type;
+
+        // Toggle icons
+        if (type === 'text') {
+            eyeIcon.style.display = 'none';
+            eyeOffIcon.style.display = 'block';
+        } else {
+            eyeIcon.style.display = 'block';
+            eyeOffIcon.style.display = 'none';
+        }
+    });
+}
 
 // Initialize popup
 async function init() {
@@ -123,64 +166,6 @@ loginForm.addEventListener('submit', async (e) => {
 });
 
 /**
- * Handle Google login
- */
-googleLoginBtn.addEventListener('click', async () => {
-    hideError();
-    setLoading(true);
-
-    try {
-        // 1. Get Google Auth Code/Token via chrome.identity
-        // Note: For id_token, we need to use a specific response_type
-        const manifest = chrome.runtime.getManifest();
-        const clientId = "956597525941-4mc5jb4107i7166hks1jq3ciqnd9u9d8.apps.googleusercontent.com"; // From BE/FE env
-        const redirectUri = `https://${chrome.runtime.id}.chromiumapp.org/`;
-        const scope = encodeURIComponent('email profile openid');
-
-        const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&response_type=id_token&redirect_uri=${redirectUri}&scope=${scope}&nonce=${Math.random().toString(36).substring(2)}`;
-
-        console.log('Lingora: Launching Google Auth flow...');
-
-        const responseUrl = await chrome.identity.launchWebAuthFlow({
-            url: authUrl,
-            interactive: true
-        });
-
-        if (!responseUrl) {
-            throw new Error('Google Login was cancelled or failed.');
-        }
-
-        // 2. Extract id_token from response URL
-        const url = new URL(responseUrl.replace('#', '?')); // Convert fragment to query params
-        const idToken = url.searchParams.get('id_token');
-
-        if (!idToken) {
-            throw new Error('Could not obtain Google ID Token.');
-        }
-
-        // 3. Send idToken to background -> api -> BE
-        const result = await chrome.runtime.sendMessage({
-            action: 'googleLogin',
-            idToken: idToken
-        });
-
-        if (result.error) {
-            throw new Error(result.error);
-        }
-
-        // Success!
-        await loadUserData();
-        showMainView();
-
-    } catch (error) {
-        console.error('Google Login error:', error);
-        showError(error.message || 'Đăng nhập Google thất bại.');
-    } finally {
-        setLoading(false);
-    }
-});
-
-/**
  * Handle logout
  */
 logoutBtn.addEventListener('click', async () => {
@@ -192,6 +177,30 @@ logoutBtn.addEventListener('click', async () => {
         console.error('Logout error:', error);
     }
 });
+
+/**
+ * Handle open web app with auth sync
+ */
+const openWebAppBtn = document.getElementById('open-webapp-btn');
+if (openWebAppBtn) {
+    openWebAppBtn.addEventListener('click', async () => {
+        try {
+            // Get current auth token
+            const authCheck = await chrome.runtime.sendMessage({ action: 'checkAuth' });
+
+            // Use centralized config to generate URL
+            const webAppUrl = window.LINGORA_CONFIG.getWebAppUrlWithSync(
+                '/study-sets',
+                authCheck.accessToken
+            );
+
+            // Open in new tab
+            chrome.tabs.create({ url: webAppUrl });
+        } catch (error) {
+            console.error('Error opening web app:', error);
+        }
+    });
+}
 
 /**
  * Set loading state

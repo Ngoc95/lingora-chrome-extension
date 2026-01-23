@@ -83,6 +83,96 @@ Extension sử dụng các endpoint sau từ Lingora backend:
 
 ## Cấu hình
 
+### 🔧 Cấu hình Môi trường (Environment)
+
+Extension sử dụng **file cấu hình tập trung** để dễ dàng chuyển đổi giữa môi trường phát triển và production.
+
+**Chỉ cần sửa MỘT file:** `config.js`
+
+#### Môi trường Local (Development)
+
+```javascript
+// config.js - Dòng 15
+const ENVIRONMENT = 'localhost';
+```
+
+Kết nối tới:
+- Web App: `http://localhost:3000`
+- Backend: `http://localhost:4000` (cấu hình trong `api.js`)
+
+#### Môi trường Production (Deploy)
+
+```javascript
+// config.js - Dòng 15
+const ENVIRONMENT = 'production';
+```
+
+Kết nối tới:
+- Web App: `https://lingora-web-app.vercel.app`
+- Backend: `https://lingora-be-dxce.onrender.com`
+
+### Những gì tự động cập nhật
+
+Khi bạn thay đổi `ENVIRONMENT` trong `config.js`, tất cả những thứ sau sẽ tự động cập nhật:
+
+✅ Link "Mở trang bộ học liệu" trong popup từ điển  
+✅ Nút "Mở ứng dụng web" trong popup  
+✅ Link "Đăng ký ngay" ở trang login  
+✅ Link "Mở trang bộ học liệu" ở trang login  
+✅ Tất cả URL có `syncToken` để đồng bộ đăng nhập  
+
+### Test trên Localhost
+
+1. **Đặt môi trường về localhost:**
+   ```javascript
+   // config.js
+   const ENVIRONMENT = 'localhost';
+   ```
+
+2. **Chạy web app:**
+   ```bash
+   cd lingora-web-app
+   npm run dev
+   ```
+   Web app chạy trên `http://localhost:3000`
+
+3. **Chạy backend:**
+   ```bash
+   cd Lingora\ BE
+   npm run dev
+   ```
+   Backend chạy trên `http://localhost:4000`
+
+4. **Reload extension:**
+   - Vào `chrome://extensions/`
+   - Click nút "Reload" trên extension Lingora
+
+5. **Test:**
+   - Mở popup extension
+   - Đăng nhập
+   - Click "Mở ứng dụng web"
+   - Sẽ mở `http://localhost:3000/study-sets?syncToken=...`
+   - User tự động đăng nhập
+
+### Trước khi Deploy
+
+**QUAN TRỌNG:** Trước khi push lên GitHub (sẽ tự động deploy):
+
+1. Đổi môi trường về production:
+   ```javascript
+   // config.js
+   const ENVIRONMENT = 'production';
+   ```
+
+2. Commit và push:
+   ```bash
+   git add config.js
+   git commit -m "Chuyển sang môi trường production"
+   git push
+   ```
+
+### Cấu hình Backend API
+
 Mặc định, extension kết nối với backend tại `http://localhost:4000`. 
 
 Để thay đổi URL backend, chỉnh sửa trong `api.js`:

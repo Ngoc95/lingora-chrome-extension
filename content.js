@@ -23,6 +23,18 @@ function init() {
 }
 
 /**
+ * Generate web app URL with syncToken parameter
+ * Uses centralized config from config.js
+ * @param {string} path - The path on the web app (e.g., '/study-sets', '/vocabulary')
+ * @param {string} accessToken - The access token to sync
+ * @returns {string} Complete URL with syncToken parameter
+ */
+function generateWebAppUrl(path = '/study-sets', accessToken = null) {
+    return window.LINGORA_CONFIG.getWebAppUrlWithSync(path, accessToken);
+}
+
+
+/**
  * Sync authentication state with the Lingora web app
  */
 async function syncAuthWithWebApp() {
@@ -116,18 +128,26 @@ async function syncAuthWithWebApp() {
                         type: 'LINGORA_SET_WEB_AUTH',
                         data: { accessToken: extAuth.accessToken, user: extAuth.user }
                     }, '*');
-                } else if (!webAuth || !webAuth.accessToken) {
-                    // Both logged out or web app logged out
-                    if (extAuth.isAuthenticated) {
-                        // This could be a logout on the web app -> sync logout to extension
-                        console.log('Lingora: Syncing logout from web app');
-                        await chrome.runtime.sendMessage({ action: 'syncAuth', accessToken: null });
-                    }
+                }
+
+                // Check if web app logged out while extension is still logged in
+                if (extAuth.isAuthenticated && webAuth && !webAuth.accessToken) {
+                    console.log('Lingora: Web app logged out, syncing logout to extension');
+                    await chrome.runtime.sendMessage({ action: 'syncAuth', accessToken: null });
                 }
             } catch (e) {
-                if (e.message.includes('Extension context invalidated')) {
+                if (e.message && e.message.includes('Extension context invalidated')) {
                     console.log('Lingora: Extension updated, please refresh the page.');
                 }
+            }
+        } else if (event.data.type === 'LINGORA_INVALID_TOKEN') {
+            // Web app detected invalid token from extension, logout extension
+            console.log('Lingora: Web app detected invalid token, logging out extension');
+            try {
+                await chrome.runtime.sendMessage({ action: 'syncAuth', accessToken: null });
+                console.log('Lingora: Extension logged out successfully');
+            } catch (e) {
+                console.error('Lingora: Failed to logout extension:', e);
             }
         }
     });
@@ -242,6 +262,13 @@ function handleClickOutside(event) {
  */
 async function lookupWord(term) {
     try {
+        // Check if chrome.runtime is available
+        if (!chrome || !chrome.runtime || !chrome.runtime.sendMessage) {
+            showErrorPopup('Extension bị lỗi. Vui lòng tải lại trang (F5) hoặc reload extension.');
+            console.error('Lingora: chrome.runtime is not available');
+            return;
+        }
+
         // Show loading state
         showLoadingPopup();
 
@@ -250,15 +277,20 @@ async function lookupWord(term) {
         try {
             authCheck = await chrome.runtime.sendMessage({ action: 'checkAuth' });
         } catch (e) {
-            if (e.message.includes('Extension context invalidated')) {
+            if (e.message && e.message.includes('Extension context invalidated')) {
                 showErrorPopup('Extension đã được cập nhật. Vui lòng tải lại trang (nhấn F5) để tiếp tục sử dụng.');
+                return;
+            }
+            // Check if it's a runtime error
+            if (!chrome.runtime || !chrome.runtime.id) {
+                showErrorPopup('Extension bị lỗi. Vui lòng reload extension và tải lại trang.');
                 return;
             }
             throw e;
         }
 
         if (!authCheck || !authCheck.isAuthenticated) {
-            showErrorPopup('Vui lòng đăng nhập để sử dụng tính năng này.');
+            showLoginPromptPopup();
             return;
         }
 
@@ -359,6 +391,46 @@ function showErrorPopup(message) {
 }
 
 /**
+ * Show login prompt popup with button to open extension
+ */
+function showLoginPromptPopup() {
+    hideDictionaryPopup();
+
+    dictionaryPopup = document.createElement('div');
+    dictionaryPopup.id = 'lingora-dictionary-popup';
+    dictionaryPopup.className = 'lingora-popup';
+    dictionaryPopup.innerHTML = `
+    <div class="lingora-popup-content">
+      <div class="lingora-error">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="8" x2="12" y2="12"></line>
+          <line x1="12" y1="16" x2="12.01" y2="16"></line>
+        </svg>
+        <p>Vui lòng đăng nhập để sử dụng tính năng này.</p>
+        <button class="lingora-btn-login" style="background: #10b981; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; margin-top: 12px;">
+          Đăng nhập
+        </button>
+        <button class="lingora-btn-close" style="margin-top: 8px;">Đóng</button>
+      </div>
+    </div>
+  `;
+
+    positionPopup();
+    document.body.appendChild(dictionaryPopup);
+
+    // Add login button handler - opens extension popup
+    dictionaryPopup.querySelector('.lingora-btn-login').addEventListener('click', () => {
+        chrome.runtime.sendMessage({ action: 'openPopup' });
+        hideDictionaryPopup();
+        hideSelectionButton();
+    });
+
+    // Add close button handler
+    dictionaryPopup.querySelector('.lingora-btn-close').addEventListener('click', hideDictionaryPopup);
+}
+
+/**
  * Show dictionary popup with word data
  */
 async function showDictionaryPopup(wordData) {
@@ -426,8 +498,7 @@ async function showDictionaryPopup(wordData) {
     }
 
     const authCheck = await chrome.runtime.sendMessage({ action: 'checkAuth' });
-    const syncTokenParam = authCheck.accessToken ? `?syncToken=${authCheck.accessToken}` : '';
-    const webAppUrl = `https://lingora-web-app.vercel.app/study-sets${syncTokenParam}`;
+    const webAppUrl = generateWebAppUrl('/study-sets', authCheck.accessToken);
 
     html += `
       </div>

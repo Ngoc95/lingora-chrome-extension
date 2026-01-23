@@ -13,8 +13,19 @@ const API_CONFIG = {
  * Get the API base URL from storage or use default
  */
 async function getApiBaseUrl() {
+    // First try to get from chrome storage
     const result = await chrome.storage.local.get(['apiBaseUrl']);
-    return result.apiBaseUrl || API_CONFIG.baseURL;
+    if (result.apiBaseUrl) {
+        return result.apiBaseUrl;
+    }
+
+    // Then try to use centralized config (if loaded)
+    if (typeof globalThis !== 'undefined' && globalThis.LINGORA_CONFIG) {
+        return globalThis.LINGORA_CONFIG.getBackendUrl();
+    }
+
+    // Fallback to API_CONFIG
+    return API_CONFIG.baseURL;
 }
 
 /**
